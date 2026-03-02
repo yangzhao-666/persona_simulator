@@ -27,9 +27,10 @@ npm-debug.log*
 .vscode/
 .idea/
 
-# Ollama models / local LLM data
+# Ollama binary, libs, and models (large files)
+ollama/bin/
+ollama/lib/
+ollama/models/
 *.gguf
-*.bin
 *.ggml
-models/
-ollama/
+*.tar.zst
