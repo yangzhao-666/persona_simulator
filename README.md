@@ -2,6 +2,8 @@
 
 An LLM-powered tool to test how different user personas react to app notifications. Each persona is a live AI instance with memory — they evolve day by day, and you can send notifications at any point to see how they react.
 
+[Take a look here](https://yangzhao-666.github.io/persona_simulator/) Only the interface, no actuall LLM running.
+
 ## How It Works
 
 1. **Select an LLM provider** — Ollama (free/local), Groq (free tier), OpenRouter (free models), or Anthropic (paid)
