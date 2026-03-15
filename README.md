@@ -1,132 +1,121 @@
 # Persona Simulator
 
-An LLM-powered tool to test how different user personas react to app notifications. Each persona is a live AI instance with memory — they evolve day by day, and you can send notifications at any point to see how they react.
+An LLM-powered tool to simulate how different user personas react to app notifications. Each persona is a live AI instance with persistent memory — they evolve day by day, and you can fire notifications at any point to observe realistic reactions, emotional impact, and UX feedback.
 
-[Take a look here](https://yangzhao-666.github.io/persona_simulator/) Only the interface, no actuall LLM running.
+[**Live demo →**](https://yangzhao-666.github.io/persona_simulator/) *(interface only — no LLM connected)*
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/YOUR_USERNAME/persona_simulator.git
+cd persona_simulator
+npm install
+npm run dev
+# Open http://localhost:5173/persona_simulator/
+```
+
+---
 
 ## How It Works
 
-1. **Select an LLM provider** — Ollama (free/local), Groq (free tier), OpenRouter (free models), or Anthropic (paid)
-2. **Pick a persona** — each has a unique backstory, personality, and recovery stage
-3. **Press "Next Day"** — the LLM generates what happens in their life (mood shifts, cravings, life events)
-4. **Send notifications** — click any notification template and watch the persona react based on their current emotional state
-5. **Monitor stats** — mood, craving, engagement, sober days update in real-time
+```
+Select LLM provider → Pick persona → Set time of day
+  → Next Day      — LLM generates a life event in character
+  → Send notif    — LLM reacts based on current state + time of day
+  → Repeat        — stats update in real-time across the timeline
+```
+
+**Auto mode** advances days automatically every 2.5 seconds, cycling through Morning → Afternoon → Evening with each step.
+
+---
 
 ## Personas
 
-Each persona maps to a stage of the **Transtheoretical Model of Change**:
+Each persona represents a stage of the **Transtheoretical Model of Change**:
 
-| Persona | Age | Occupation | Stage | Personality |
+| Persona | Age | Occupation | Stage | Description |
 |---------|-----|------------|-------|-------------|
-| **Jan** 👨‍🔧 | 52 | Construction Worker | Precontemplation | Skeptical, blunt, not tech-savvy. Wife signed him up. Drinks 4–5 beers every evening, thinks it's normal. Dry sense of humor. |
-| **Lisa** 👩‍💻 | 34 | Marketing Manager | Action | Anxious, perfectionist, emotionally fragile. 2 weeks sober then relapsed. Milestone celebrations lift her. "Incomplete" messages feel like failure. |
-| **Mohamed** 👨‍🎓 | 28 | PhD Student | Contemplation | Analytical, rational. Weekend binge drinker. Treats the app like a research tool. Hates patronizing language. |
-| **Anja** 👵 | 61 | Retired Teacher | Maintenance | Warm, nurturing, patient. 4 months mostly sober. Lives for the forum community. Worries about holidays and family gatherings. |
-| **🎲 Random** | — | — | any | Procedurally generated — new name, age, occupation, drinking pattern, motivation, and personality trait every click. |
+| **Jan** 👨‍🔧 | 52 | Construction Worker | Precontemplation | Skeptical, blunt. Wife signed him up. Drinks 4–5 beers nightly, thinks it's normal. |
+| **Lisa** 👩‍💻 | 34 | Marketing Manager | Action | Anxious, perfectionist. Relapsed once. Milestone-driven, notification-sensitive. |
+| **Mohamed** 👨‍🎓 | 28 | PhD Student | Contemplation | Analytical, data-oriented. Weekend binge drinker. Hates patronizing language. |
+| **Anja** 👵 | 61 | Retired Teacher | Maintenance | Warm, community-focused. 4 months sober. Lives for the forum. |
+| **🎲 Random** | varies | varies | any | Procedurally generated from attribute pools (see below). |
 
 ### Random Persona Generator
 
-Clicking **🎲 Random** generates a unique persona on the fly by combining randomised attributes:
+Each click on **🎲 Random** combines:
 
-**Names** (20 options): Emma, David, Sarah, Marco, Yuki, Fatima, Lucas, Nina, Sam, Aisha, Thomas, Priya, Carlos, Anna, Jake, Mei, Ravi, Sofia, Noah, Leila
+- **Name** — 20 options (Emma, David, Sarah, Marco, Yuki, Fatima, Lucas, Nina, …)
+- **Age** — 22–66
+- **Occupation** — 18 options (Nurse, Developer, Teacher, Chef, Journalist, Paramedic, …)
+- **Stage** — randomised (precontemplation / contemplation / action / maintenance)
+- **Drinking pattern** — e.g. *"binge drinks on weekends"*, *"drinks to fall asleep"*, *"sneaks drinks throughout the day"*
+- **Motivation** — e.g. *"doctor's warning"*, *"embarrassing incident at work"*, *"family confrontation"*
+- **Personality trait** — e.g. *"analytical, treats everything like a problem to solve"*, *"impulsive, hates being lectured"*
 
-**Occupations** (18 options): Nurse, Software Developer, Teacher, Accountant, Chef, Sales Manager, Freelancer, Warehouse Worker, Journalist, Lawyer, Graphic Designer, Shop Owner, Paramedic, Office Manager, Personal Trainer, Pharmacist, Social Worker, Electrician
-
-**Drinking patterns:**
-- Drinks 3–4 beers every evening to unwind
-- Binge drinks on weekends, sometimes through Sunday
-- Has a bottle of wine most nights, started during a difficult period
-- Drinks heavily at social events and after stressful days
-- Sneaks drinks throughout the day — functional but dependent
-- Drinks to fall asleep, has done so for years
-- Started drinking more after a major life change
-
-**Motivations to join the app:**
-- Signed up after a doctor's warning at a routine checkup
-- Joined after an embarrassing incident at a work event
-- Was encouraged by a close friend who noticed the change
-- Decided on their own after a bad hangover ruined an important day
-- Signed up after a family member confronted them
-- Started after reading an article about alcohol dependency
-- Joined after a colleague's recovery story inspired them
-
-**Personality traits:**
-- Quiet and introspective, doesn't like asking for help
-- Outgoing but uses humor to deflect serious conversations
-- Highly organized and anxious, needs structure and clear goals
-- Skeptical of self-help but desperate enough to try
-- Warm and community-oriented, thrives with peer support
-- Analytical, treats everything like a problem to solve with data
-- Impulsive, acts on emotion, hates being lectured
-- People-pleaser who hides their struggles from others
-
-The **stage** is also randomised, and initial state values (mood, craving, engagement, sober days, etc.) are seeded with realistic ranges per stage.
+Initial state values (mood, craving, engagement, sober days, etc.) are seeded with realistic ranges per stage.
 
 ### Persona State
 
-Each persona has a persistent state updated every day and after each notification:
+Each persona carries a persistent state object updated after every day-advance and notification:
 
 | Field | Description |
 |-------|-------------|
 | `day` | Current simulation day |
 | `phase` | App phase (1–5) |
-| `mood` | 0–100, emotional wellbeing |
-| `craving` | 0–100, alcohol craving intensity |
-| `engagement` | 0–100, app engagement level |
+| `mood` | 0–100 — emotional wellbeing |
+| `craving` | 0–100 — alcohol craving intensity |
+| `engagement` | 0–100 — app engagement level |
 | `soberDays` | Consecutive sober days (resets on relapse) |
 | `drinksPerDay` | Drinks consumed today |
 | `appOpensToday` | App opens today |
 | `assignmentsDone` | Total assignments completed |
 | `registrationsDone` | Total drink registrations logged |
-| `hasBuddy` | Whether persona has a buddy |
+| `hasBuddy` | Whether the persona has a buddy |
 | `forumPosts` | Total forum posts made |
 | `lastAppOpen` | Days since last app open |
 
-### Persona System Prompts
+---
 
-These are set once at the start and persist throughout the conversation:
+## Time of Day
 
-**Jan:**
-> You are Jan, a 52-year-old Dutch construction worker using the self-help alcohol recovery app. Your wife made you sign up after a fight about your drinking. You drink 4-5 beers every evening — you think this is normal. You're skeptical, blunt, not tech-savvy, and easily annoyed by anything preachy. Deep down you know your wife might have a point, but you'd never admit it. You have a dry sense of humor.
+A **Morning / Afternoon / Evening** toggle sits in the stats bar and is passed into every LLM prompt.
 
-**Lisa:**
-> You are Lisa, a 34-year-old marketing manager in Amsterdam using the self-help alcohol recovery app. You started drinking a bottle of wine most evenings during WFH. You've done 2 weeks sober once then relapsed at a friend's birthday. You're anxious, perfectionist, emotionally fragile. Milestone celebrations lift your mood. "Incomplete" or "not active" messages feel like failure. Community features are your lifeline.
+| Slot | Context hint |
+|------|-------------|
+| 🌅 Morning | Waking up, commute, start of day |
+| ☀️ Afternoon | Work hours, lunch, busy period |
+| 🌙 Evening | After work, social time, highest craving risk |
 
-**Mohamed:**
-> You are Mohamed, a 28-year-old PhD student in computer science using the self-help alcohol recovery app. You binge drink at weekend uni events but don't drink during the week. You signed up after a bad hangover made you miss a meeting. You're analytical, rational, appreciate data and patterns, hate patronizing language, and approach the app like a research tool.
-
-**Anja:**
-> You are Anja, a 61-year-old retired teacher using the self-help alcohol recovery app. You started drinking wine after your husband passed 3 years ago. You've been mostly sober for 4 months. The forum community is very important to you. You have a buddy. You're warm, nurturing, patient, not very tech-savvy. You worry about holidays and family gatherings.
+In **manual mode** the toggle stays under your control. In **auto mode** it cycles automatically with each day-advance (Morning → Afternoon → Evening → Morning…).
 
 ---
 
 ## Event Types
 
-There are three types of events that appear in the timeline:
+### 1. Life Event
 
-### 1. Life Events (`life`)
+Generated on each **Next Day** press. The LLM writes an in-character daily story and returns state changes.
 
-Generated automatically when you press **Next Day**. The LLM produces an in-character daily story and JSON state changes.
-
-**Prompt sent to LLM:**
+**Prompt:**
 ```
-It is Day {day} of your journey with the recovery app.
+It is Day {day} of your journey with the recovery app. It is {timeOfDay} ({hint}).
 
 YOUR STATE: Mood {mood}/100, Craving {craving}/100, Engagement {engagement}/100,
 Sober days: {soberDays}, Phase: {phase}, Drinks today: {drinksPerDay},
 Has buddy: {hasBuddy}, Forum posts: {forumPosts}, Days since last app open: {lastAppOpen}
 
-Describe what happens to you today in 1-2 vivid sentences, first person, in character.
-Then rate the impact.
+Describe what happens to you this {timeOfDay} in 1-2 vivid sentences, first person, in character.
 
-Respond with ONLY this JSON:
 {
-  "event": "What happened today, 1-2 sentences",
-  "moodChange": number -25 to 25,
-  "cravingChange": number -25 to 30,
-  "engagementChange": number -15 to 20,
+  "event": "string",
+  "moodChange": -25 to 25,
+  "cravingChange": -25 to 30,
+  "engagementChange": -15 to 20,
   "didDrink": boolean,
-  "drinksIfDrank": number or 0,
+  "drinksIfDrank": number,
   "openedApp": boolean,
   "didAssignment": boolean,
   "didRegistration": boolean,
@@ -134,152 +123,121 @@ Respond with ONLY this JSON:
 }
 ```
 
-**State updates from life events:**
-- `mood`, `craving`, `engagement` clamped to 0–100
-- `soberDays` resets to 0 if `didDrink: true`, otherwise increments by 1
-- `drinksPerDay` set to `drinksIfDrank`
-- `appOpensToday` increments if `openedApp: true`
-- `lastAppOpen` resets to 0 if opened, otherwise increments
-- `assignmentsDone`, `registrationsDone`, `forumPosts` increment on `true`
+**State update rules:**
+- `soberDays` resets to 0 if `didDrink: true`, otherwise increments
+- `lastAppOpen` resets to 0 if `openedApp: true`, otherwise increments
+- All numeric stats clamped to 0–100
 
 ---
 
-### 2. Notification Sent (`notif-sent`)
+### 2. Notification Sent
 
-Logged immediately when you click a notification button — before the LLM responds. Shows which notification was sent and its delivery channel.
+Logged immediately when you click a notification — before the LLM responds. Shows the notification name, delivery channel, and time of day.
 
 ---
 
-### 3. Notification Reaction (`reaction`)
+### 3. Notification Reaction
 
-Generated after a notification is sent. The LLM reacts in character based on the persona's current state.
+Generated after a notification is sent. The LLM responds in character.
 
-**Prompt sent to LLM:**
+**Prompt:**
 ```
-You just received this notification on Day {day}:
-NOTIFICATION: "{notif.name}" | Category: {notif.cat} | Channel: {notif.ch}
+You just received this notification on Day {day} in the {timeOfDay} ({hint}):
+NOTIFICATION: "{name}" | Category: {cat} | Channel: {ch}
 
 YOUR STATE: Mood {mood}/100, Craving {craving}/100, Engagement {engagement}/100,
 Sober days: {soberDays}, Phase: {phase}
 
-React in character. Respond with ONLY this JSON:
+React in character, considering the time of day.
+
 {
-  "thought": "Inner monologue 1-3 sentences, reference your current state",
+  "thought": "Inner monologue 1-3 sentences referencing state and time of day",
   "emotion": "single word",
-  "action": "ignored/dismissed/glanced/read/read later/opened app/completed action/posted on forum/messaged buddy/muted/considered uninstalling",
-  "moodChange": number -20 to 20,
-  "cravingChange": number -20 to 15,
-  "engagementChange": number -20 to 25,
+  "action": "ignored / dismissed / glanced / read / read later / opened app /
+             completed action / posted on forum / messaged buddy / muted /
+             considered uninstalling",
+  "moodChange": -20 to 20,
+  "cravingChange": -20 to 15,
+  "engagementChange": -20 to 25,
   "wouldReturn": boolean,
-  "designFeedback": "One practical UX insight from your perspective"
+  "designFeedback": "One practical UX insight from the persona's perspective"
 }
 ```
 
-**Reaction fields:**
 | Field | Description |
 |-------|-------------|
-| `thought` | In-character inner monologue referencing current emotional state |
-| `emotion` | Single-word emotion (see emotions list below) |
+| `thought` | In-character inner monologue |
+| `emotion` | Single-word emotion (motivated, anxious, hostile, relieved, …) |
 | `action` | What the persona does with the notification |
-| `moodChange` | Mood impact (-20 to +20) |
-| `cravingChange` | Craving impact (-20 to +15) |
-| `engagementChange` | Engagement impact (-20 to +25) |
-| `wouldReturn` | Churn prediction — would the persona keep using the app? |
+| `wouldReturn` | Churn indicator — would they keep using the app? |
 | `designFeedback` | UX insight from the persona's perspective |
-
-**Possible actions:** `ignored`, `dismissed`, `glanced`, `read`, `read later`, `opened app`, `completed action`, `posted on forum`, `messaged buddy`, `muted`, `considered uninstalling`
-
-**Possible emotions:** motivated, grateful, engaged, receptive, hopeful, anxious, triggered, indifferent, defensive, annoyed, hostile, overwhelmed, fatigued, disengaged, pleased, amused, confused, guilty, proud, curious, frustrated, skeptical, touched, irritated, relieved, dismissive, warm, nervous, validated, ashamed, embarrassed
 
 ---
 
-## Notification Types
+## Notifications
 
-27 notifications across 9 categories:
+27 notifications across 9 categories. Inapplicable ones are dimmed based on current state (e.g. buddy notifications when `hasBuddy: false`, inactivity reminders when the user opened the app recently).
 
-| Notification | Category | Channel |
-|-------------|----------|---------|
-| Badge Received | milestone | in-app |
-| Phase 1 Completed | milestone | in-app + email |
-| Phase 2 Completed | milestone | in-app |
-| Phase 3 Completed | milestone | in-app |
-| Phase 4 Completed | milestone | in-app + email |
-| Phase 5 Completed | milestone | in-app |
-| Buddy Accepted | social | in-app |
-| Buddy Declined | social | in-app |
-| Forum Reply Received | social | in-app |
-| Reply on Followed Topic | social | in-app |
-| Phase Results >70% | progress | silent |
-| Buddy: Phase Complete | progress | silent |
-| Buddy: Phase Incomplete | progress | silent |
-| Demographic Survey | assignment | silent |
-| Reminder: 2 Days Inactive | check-in | in-app |
-| Reminder: 7 Days Inactive | check-in | in-app |
-| Reminder: 14 Days Inactive | check-in | in-app |
-| Reminder: 28 Days Inactive | check-in | in-app |
-| Phase Results <70% | warning | silent |
-| Deactivation: 1 Month | warning | silent |
-| Deactivation: 1 Week | warning | silent |
-| Deactivation: Tomorrow | warning | silent |
-| Welcome / Overview | onboarding | in-app |
-| Buddy: 2 Weeks Inactive | re-engage | silent |
-| Buddy: 4 Weeks Inactive | re-engage | silent |
-| Nudge: Active | nudge | push |
-| Nudge: Not Active | nudge | push |
+| Category | Notifications |
+|----------|--------------|
+| **milestone** | Badge Received, Phase 1–5 Completed |
+| **social** | Buddy Accepted, Buddy Declined, Forum Reply Received, Reply on Followed Topic |
+| **progress** | Phase Results >70%, Phase Results <70%, Buddy: Phase Complete, Buddy: Phase Incomplete |
+| **check-in** | Reminder: 2 / 7 / 14 / 28 Days Inactive |
+| **warning** | Deactivation: 1 Month / 1 Week / Tomorrow |
+| **onboarding** | Welcome / Overview |
+| **assignment** | Demographic Survey |
+| **re-engage** | Buddy: 2 Weeks Inactive, Buddy: 4 Weeks Inactive |
+| **nudge** | Nudge: Active, Nudge: Not Active |
 
-**Delivery channels:**
-- `in-app` — shown inside the app
-- `push` — OS push notification
-- `silent` — background/badge only, no alert
-- `in-app + email` — both in-app and email notification
+**Delivery channels:** `in-app` · `in-app + email` · `push` · `silent`
+
+### Applicability Rules
+
+| Condition | Affected notifications |
+|-----------|----------------------|
+| `day > 7` | Welcome dimmed |
+| `phase <= 2` | Survey active; dimmed after |
+| `phase < X` | Phase X Completed dimmed |
+| `!hasBuddy` | All buddy notifications dimmed |
+| `forumPosts === 0` | Forum Reply, Followed Reply dimmed |
+| `lastAppOpen < threshold` | Inactivity reminders and deactivation warnings dimmed |
 
 ---
 
 ## LLM Providers
 
-| Provider | Cost | Setup |
+| Provider | Cost | Notes |
 |----------|------|-------|
-| **Ollama** | Free | Install from [ollama.com](https://ollama.com), run `ollama pull llama3.1` |
-| **Groq** | Free tier | Get key at [console.groq.com](https://console.groq.com) |
-| **OpenRouter** | Free models | Get key at [openrouter.ai](https://openrouter.ai), select `:free` models |
-| **Anthropic** | ~$0.003/call | Get key at [console.anthropic.com](https://console.anthropic.com) |
+| **Ollama** | Free | Local. Install from [ollama.com](https://ollama.com), run `ollama pull llama3.1`, start with `OLLAMA_ORIGINS=* ollama serve` |
+| **Groq** | Free tier | Fast inference. Key at [console.groq.com](https://console.groq.com) |
+| **OpenRouter** | Free models | Select `:free` models. Key at [openrouter.ai](https://openrouter.ai) |
+| **Anthropic** | ~$0.003/call | Best quality. Key at [console.anthropic.com](https://console.anthropic.com) |
 
-The app maintains a **rolling 30-message conversation history** per persona to preserve character consistency across days and notifications.
+The app keeps a **rolling 30-message conversation history** per persona to maintain character consistency across days.
 
 ---
 
-## Setup
+## Deployment
 
-```bash
-git clone https://github.com/YOUR_USERNAME/persona_simulator.git
-cd persona_simulator
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173/persona_simulator/`
-
-## Deploy to GitHub Pages
-
+**GitHub Pages:**
 ```bash
 npm run deploy
+# Then: Settings → Pages → Source: gh-pages branch
 ```
 
-Then go to repo **Settings → Pages → Source: gh-pages branch**.
+**Vercel / Netlify:**
+Remove the `base` field from `vite.config.js` (only needed for GitHub Pages), then deploy normally.
 
-Your site will be live at `https://YOUR_USERNAME.github.io/persona_simulator/`
-
-## Deploy to Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
-
-> Note: For Vercel/Netlify, remove the `base` field from `vite.config.js` since it's only needed for GitHub Pages.
+---
 
 ## Tech Stack
 
 - React 18 + Vite
-- Any OpenAI-compatible LLM (Ollama, Groq, OpenRouter) or Anthropic API
-- No other dependencies
+- OpenAI-compatible LLMs (Ollama, Groq, OpenRouter) or Anthropic API
+- No backend, no database — all state is in-memory
+
+---
 
 ## License
 
