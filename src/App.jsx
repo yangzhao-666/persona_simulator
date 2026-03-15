@@ -271,25 +271,33 @@ const EMOTION_COLORS = {
 // ─── LLM Prompts ───
 const JSON_INSTRUCTION = `\n\nCRITICAL: Respond with ONLY a valid JSON object. No markdown, no backticks, no explanation before or after. Just the raw JSON.`;
 
-function lifeEventPrompt(state) {
-  return `It is Day ${state.day} of your journey with the the recovery app.
+const TIME_OF_DAY = [
+  { id: "morning",   label: "Morning",   icon: "🌅", hint: "waking up, commute, start of day" },
+  { id: "afternoon", label: "Afternoon", icon: "☀️", hint: "work hours, lunch, busy period" },
+  { id: "evening",   label: "Evening",   icon: "🌙", hint: "after work, social time, highest craving risk" },
+];
+
+function lifeEventPrompt(state, timeOfDay) {
+  const tod = TIME_OF_DAY.find(t => t.id === timeOfDay);
+  return `It is Day ${state.day} of your journey with the recovery app. It is ${tod.label.toLowerCase()} (${tod.hint}).
 
 YOUR STATE: Mood ${state.mood}/100, Craving ${state.craving}/100, Engagement ${state.engagement}/100, Sober days: ${state.soberDays}, Phase: ${state.phase}, Drinks today: ${state.drinksPerDay}, Has buddy: ${state.hasBuddy}, Forum posts: ${state.forumPosts}, Days since last app open: ${state.lastAppOpen}
 
-Describe what happens to you today in 1-2 vivid sentences, first person, in character. Then rate the impact.
+Describe what happens to you this ${tod.label.toLowerCase()} in 1-2 vivid sentences, first person, in character. Then rate the impact.
 
 Respond with ONLY this JSON:
-{"event":"What happened today, 1-2 sentences","moodChange":number -25 to 25,"cravingChange":number -25 to 30,"engagementChange":number -15 to 20,"didDrink":boolean,"drinksIfDrank":number or 0,"openedApp":boolean,"didAssignment":boolean,"didRegistration":boolean,"postedForum":boolean}`;
+{"event":"What happened, 1-2 sentences","moodChange":number -25 to 25,"cravingChange":number -25 to 30,"engagementChange":number -15 to 20,"didDrink":boolean,"drinksIfDrank":number or 0,"openedApp":boolean,"didAssignment":boolean,"didRegistration":boolean,"postedForum":boolean}`;
 }
 
-function reactionPrompt(notif, state) {
-  return `You just received this notification on Day ${state.day}:
+function reactionPrompt(notif, state, timeOfDay) {
+  const tod = TIME_OF_DAY.find(t => t.id === timeOfDay);
+  return `You just received this notification on Day ${state.day} in the ${tod.label.toLowerCase()} (${tod.hint}):
 NOTIFICATION: "${notif.name}" | Category: ${notif.cat} | Channel: ${notif.ch}
 
 YOUR STATE: Mood ${state.mood}/100, Craving ${state.craving}/100, Engagement ${state.engagement}/100, Sober days: ${state.soberDays}, Phase: ${state.phase}
 
-React in character. Respond with ONLY this JSON:
-{"thought":"Inner monologue 1-3 sentences, reference your current state","emotion":"single word","action":"ignored/dismissed/glanced/read/read later/opened app/completed action/posted on forum/messaged buddy/muted/considered uninstalling","moodChange":number -20 to 20,"cravingChange":number -20 to 15,"engagementChange":number -20 to 25,"wouldReturn":boolean,"designFeedback":"One practical UX insight from your perspective"}`;
+React in character, considering the time of day. Respond with ONLY this JSON:
+{"thought":"Inner monologue 1-3 sentences, reference your current state and the time of day","emotion":"single word","action":"ignored/dismissed/glanced/read/read later/opened app/completed action/posted on forum/messaged buddy/muted/considered uninstalling","moodChange":number -20 to 20,"cravingChange":number -20 to 15,"engagementChange":number -20 to 25,"wouldReturn":boolean,"designFeedback":"One practical UX insight from your perspective"}`;
 }
 
 // ─── Stat Bar ───
@@ -320,6 +328,7 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [speed, setSpeed] = useState("manual");
   const [catFilter, setCatFilter] = useState("all");
+  const [timeOfDay, setTimeOfDay] = useState("morning");
   const [error, setError] = useState(null);
   const endRef = useRef(null);
   const autoRef = useRef(null);
@@ -367,7 +376,7 @@ export default function App() {
     setError(null);
 
     try {
-      const prompt = lifeEventPrompt(state);
+      const prompt = lifeEventPrompt(state, timeOfDay);
       const sysPrompt = persona.systemPrompt + JSON_INSTRUCTION;
       const text = await callLLM(provider, llmConfig, sysPrompt, [...convHistory.slice(-16), { role: "user", content: prompt }]);
       const ev = parseJSON(text);
@@ -386,25 +395,25 @@ export default function App() {
         lastAppOpen: ev.openedApp ? 0 : state.lastAppOpen + 1,
       });
       setState(ns);
-      setTimeline(t => [...t, { type: "life", ...ev, day: ns.day, id: Date.now() }]);
-      setConvHistory(h => [...h, { role: "user", content: `Day ${ns.day}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30));
+      setTimeline(t => [...t, { type: "life", ...ev, day: ns.day, timeOfDay, id: Date.now() }]);
+      setConvHistory(h => [...h, { role: "user", content: `Day ${ns.day} ${timeOfDay}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30));
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to generate. Check your LLM connection.");
       setSpeed("manual");
     }
     setIsProcessing(false);
-  }, [isProcessing, state, persona, convHistory, provider, llmConfig]);
+  }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay]);
 
   const sendNotification = useCallback(async (notif) => {
     if (isProcessing || !state) return;
     setIsProcessing(true);
     setError(null);
 
-    setTimeline(t => [...t, { type: "notif-sent", notif, day: state.day, id: Date.now() }]);
+    setTimeline(t => [...t, { type: "notif-sent", notif, day: state.day, timeOfDay, id: Date.now() }]);
 
     try {
-      const prompt = reactionPrompt(notif, state);
+      const prompt = reactionPrompt(notif, state, timeOfDay);
       const sysPrompt = persona.systemPrompt + JSON_INSTRUCTION;
       const text = await callLLM(provider, llmConfig, sysPrompt, [...convHistory.slice(-20), { role: "user", content: prompt }]);
       const reaction = parseJSON(text);
@@ -423,7 +432,7 @@ export default function App() {
       setError(e.message || "Failed to generate reaction.");
     }
     setIsProcessing(false);
-  }, [isProcessing, state, persona, convHistory, provider, llmConfig]);
+  }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay]);
 
   const filteredNotifs = catFilter === "all" ? NOTIFICATIONS : NOTIFICATIONS.filter(n => n.cat === catFilter);
 
@@ -582,6 +591,18 @@ export default function App() {
             <div style={{ fontSize: 7, color: "#475569", textTransform: "uppercase" }}>Day</div>
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "JetBrains Mono", color: "#818cf8" }}>{state.day}</div>
           </div>
+          <div style={{ display: "flex", gap: 2 }}>
+            {TIME_OF_DAY.map(t => (
+              <button key={t.id} onClick={() => setTimeOfDay(t.id)} title={t.hint} style={{
+                background: timeOfDay === t.id ? "rgba(129,140,248,0.1)" : "transparent",
+                border: timeOfDay === t.id ? "1px solid rgba(129,140,248,0.3)" : "1px solid transparent",
+                borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontSize: 9,
+                color: timeOfDay === t.id ? "#818cf8" : "#475569",
+              }}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
           <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.05)" }} />
           <StatBar label="Mood" value={state.mood} color={moodColor} icon="😊" />
           <StatBar label="Craving" value={state.craving} color={cravingColor} icon="🍺" />
@@ -646,6 +667,7 @@ export default function App() {
                   <div key={entry.id} style={{ display: "flex", gap: 6, marginBottom: 7, animation: "si 0.3s" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 28 }}>
                       <div style={{ fontSize: 8, fontFamily: "JetBrains Mono", color: "#475569" }}>D{entry.day}</div>
+                      <div style={{ fontSize: 8 }}>{TIME_OF_DAY.find(t => t.id === entry.timeOfDay)?.icon ?? ""}</div>
                       <div style={{ width: 1, flex: 1, background: "rgba(255,255,255,0.05)" }} />
                     </div>
                     <div style={{ flex: 1, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.035)", borderRadius: 6, padding: "6px 8px" }}>
@@ -669,6 +691,7 @@ export default function App() {
                     <div style={{ flex: 1, background: (CAT_COLORS[entry.notif.cat] || "#64748b") + "06", border: `1px solid ${CAT_COLORS[entry.notif.cat] || "#64748b"}12`, borderRadius: 5, padding: "4px 7px" }}>
                       <span style={{ fontSize: 9, color: CAT_COLORS[entry.notif.cat] || "#94a3b8" }}>🔔 {entry.notif.name}</span>
                       <span style={{ fontSize: 7, color: "#475569", marginLeft: 5 }}>{entry.notif.ch}</span>
+                      {entry.timeOfDay && <span style={{ fontSize: 7, color: "#334155", marginLeft: 4 }}>{TIME_OF_DAY.find(t => t.id === entry.timeOfDay)?.icon} {entry.timeOfDay}</span>}
                     </div>
                   </div>
                 );
