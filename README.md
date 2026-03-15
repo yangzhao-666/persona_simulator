@@ -22,6 +22,45 @@ Each persona maps to a stage of the **Transtheoretical Model of Change**:
 | **Lisa** 👩‍💻 | 34 | Marketing Manager | Action | Anxious, perfectionist, emotionally fragile. 2 weeks sober then relapsed. Milestone celebrations lift her. "Incomplete" messages feel like failure. |
 | **Mohamed** 👨‍🎓 | 28 | PhD Student | Contemplation | Analytical, rational. Weekend binge drinker. Treats the app like a research tool. Hates patronizing language. |
 | **Anja** 👵 | 61 | Retired Teacher | Maintenance | Warm, nurturing, patient. 4 months mostly sober. Lives for the forum community. Worries about holidays and family gatherings. |
+| **🎲 Random** | — | — | any | Procedurally generated — new name, age, occupation, drinking pattern, motivation, and personality trait every click. |
+
+### Random Persona Generator
+
+Clicking **🎲 Random** generates a unique persona on the fly by combining randomised attributes:
+
+**Names** (20 options): Emma, David, Sarah, Marco, Yuki, Fatima, Lucas, Nina, Sam, Aisha, Thomas, Priya, Carlos, Anna, Jake, Mei, Ravi, Sofia, Noah, Leila
+
+**Occupations** (18 options): Nurse, Software Developer, Teacher, Accountant, Chef, Sales Manager, Freelancer, Warehouse Worker, Journalist, Lawyer, Graphic Designer, Shop Owner, Paramedic, Office Manager, Personal Trainer, Pharmacist, Social Worker, Electrician
+
+**Drinking patterns:**
+- Drinks 3–4 beers every evening to unwind
+- Binge drinks on weekends, sometimes through Sunday
+- Has a bottle of wine most nights, started during a difficult period
+- Drinks heavily at social events and after stressful days
+- Sneaks drinks throughout the day — functional but dependent
+- Drinks to fall asleep, has done so for years
+- Started drinking more after a major life change
+
+**Motivations to join the app:**
+- Signed up after a doctor's warning at a routine checkup
+- Joined after an embarrassing incident at a work event
+- Was encouraged by a close friend who noticed the change
+- Decided on their own after a bad hangover ruined an important day
+- Signed up after a family member confronted them
+- Started after reading an article about alcohol dependency
+- Joined after a colleague's recovery story inspired them
+
+**Personality traits:**
+- Quiet and introspective, doesn't like asking for help
+- Outgoing but uses humor to deflect serious conversations
+- Highly organized and anxious, needs structure and clear goals
+- Skeptical of self-help but desperate enough to try
+- Warm and community-oriented, thrives with peer support
+- Analytical, treats everything like a problem to solve with data
+- Impulsive, acts on emotion, hates being lectured
+- People-pleaser who hides their struggles from others
+
+The **stage** is also randomised, and initial state values (mood, craving, engagement, sober days, etc.) are seeded with realistic ranges per stage.
 
 ### Persona State
 

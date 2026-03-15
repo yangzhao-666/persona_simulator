@@ -104,6 +104,60 @@ function parseJSON(text) {
   return JSON.parse(cleaned);
 }
 
+// ─── Random Persona Generator ───
+function rnd(n) { return Math.floor(Math.random() * n); }
+function pick(arr) { return arr[rnd(arr.length)]; }
+
+function generateRandomPersona() {
+  const name = pick(["Emma","David","Sarah","Marco","Yuki","Fatima","Lucas","Nina","Sam","Aisha","Thomas","Priya","Carlos","Anna","Jake","Mei","Ravi","Sofia","Noah","Leila"]);
+  const age = 22 + rnd(45);
+  const occupation = pick(["Nurse","Software Developer","Teacher","Accountant","Chef","Sales Manager","Freelancer","Warehouse Worker","Journalist","Lawyer","Graphic Designer","Shop Owner","Paramedic","Office Manager","Personal Trainer","Pharmacist","Social Worker","Electrician"]);
+  const stage = pick(["precontemplation","contemplation","action","maintenance"]);
+  const avatar = pick(["👨","👩","🧑","👨‍💼","👩‍💼","👨‍🔬","👩‍🔬","👨‍🎨","👩‍🎨","🧑‍💻"]);
+
+  const pattern = pick([
+    `drinks 3–4 beers every evening to unwind`,
+    `binge drinks on weekends, sometimes through Sunday`,
+    `has a bottle of wine most nights, started during a difficult period`,
+    `drinks heavily at social events and after stressful days`,
+    `sneaks drinks throughout the day — functional but dependent`,
+    `drinks to fall asleep, has done so for years`,
+    `started drinking more after a major life change`,
+  ]);
+  const motivation = pick([
+    `signed up after a doctor's warning at a routine checkup`,
+    `joined after an embarrassing incident at a work event`,
+    `was encouraged by a close friend who noticed the change`,
+    `decided on their own after a bad hangover ruined an important day`,
+    `signed up after a family member confronted them`,
+    `started after reading an article about alcohol dependency`,
+    `joined after a colleague's recovery story inspired them`,
+  ]);
+  const trait = pick([
+    `quiet and introspective, doesn't like asking for help`,
+    `outgoing but uses humor to deflect serious conversations`,
+    `highly organized and anxious, needs structure and clear goals`,
+    `skeptical of self-help but desperate enough to try`,
+    `warm and community-oriented, thrives with peer support`,
+    `analytical, treats everything like a problem to solve with data`,
+    `impulsive, acts on emotion, hates being lectured`,
+    `people-pleaser who hides their struggles from others`,
+  ]);
+
+  const systemPrompt = `You are ${name}, a ${age}-year-old ${occupation} using the self-help alcohol recovery app. You ${pattern}. You ${motivation}. You are ${trait}.`;
+  const bio = `${pattern.charAt(0).toUpperCase() + pattern.slice(1)}. ${motivation.charAt(0).toUpperCase() + motivation.slice(1)}.`;
+
+  const clamp100 = v => Math.min(100, Math.max(0, v));
+  const stateByStage = {
+    precontemplation: { phase: 1, mood: clamp100(45 + rnd(25)), craving: clamp100(60 + rnd(25)), engagement: clamp100(10 + rnd(20)), soberDays: rnd(5),         drinksPerDay: 3 + rnd(3),  appOpensToday: 0, assignmentsDone: rnd(2),       registrationsDone: rnd(3),       hasBuddy: false,              forumPosts: rnd(2) },
+    contemplation:    { phase: 2, mood: clamp100(50 + rnd(25)), craving: clamp100(35 + rnd(25)), engagement: clamp100(35 + rnd(25)), soberDays: 2 + rnd(12),      drinksPerDay: 0,           appOpensToday: 1, assignmentsDone: 1 + rnd(4),   registrationsDone: 3 + rnd(6),   hasBuddy: Math.random() > 0.7, forumPosts: rnd(3) },
+    action:           { phase: 3, mood: clamp100(55 + rnd(25)), craving: clamp100(25 + rnd(30)), engagement: clamp100(60 + rnd(25)), soberDays: 5 + rnd(25),      drinksPerDay: 0,           appOpensToday: 2, assignmentsDone: 3 + rnd(7),   registrationsDone: 8 + rnd(12),  hasBuddy: Math.random() > 0.4, forumPosts: 1 + rnd(6) },
+    maintenance:      { phase: 5, mood: clamp100(65 + rnd(20)), craving: clamp100(10 + rnd(25)), engagement: clamp100(70 + rnd(20)), soberDays: 60 + rnd(150),    drinksPerDay: 0,           appOpensToday: 3, assignmentsDone: 14 + rnd(12), registrationsDone: 28 + rnd(35), hasBuddy: Math.random() > 0.3, forumPosts: 8 + rnd(25) },
+  };
+
+  return { name, age, avatar, occupation, bio, stage, systemPrompt, initialState: { day: 1, lastAppOpen: 0, ...stateByStage[stage] } };
+}
+
 // ─── Persona Definitions ───
 const PERSONAS = {
   jan: {
@@ -229,6 +283,7 @@ export default function App() {
   const [provider, setProvider] = useState("ollama");
   const [llmConfig, setLlmConfig] = useState({ url: PROVIDERS.ollama.defaultUrl, model: PROVIDERS.ollama.defaultModel, apiKey: "" });
   const [selectedPersona, setSelectedPersona] = useState("lisa");
+  const [randomPersona, setRandomPersona] = useState(null);
   const [state, setState] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [convHistory, setConvHistory] = useState([]);
@@ -239,14 +294,24 @@ export default function App() {
   const endRef = useRef(null);
   const autoRef = useRef(null);
 
-  const persona = PERSONAS[selectedPersona];
+  const persona = selectedPersona === "random" ? randomPersona : PERSONAS[selectedPersona];
   const providerInfo = PROVIDERS[provider];
 
   useEffect(() => {
-    setState({ ...persona.initialState });
+    if (selectedPersona === "random") return; // handled by handleRandomClick
+    setState({ ...PERSONAS[selectedPersona].initialState });
     setTimeline([]);
     setConvHistory([]);
   }, [selectedPersona]);
+
+  const handleRandomClick = () => {
+    const p = generateRandomPersona();
+    setRandomPersona(p);
+    setSelectedPersona("random");
+    setState({ ...p.initialState });
+    setTimeline([]);
+    setConvHistory([]);
+  };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -414,7 +479,7 @@ export default function App() {
     );
   }
 
-  if (!state) return null;
+  if (!state || !persona) return null;
 
   const moodColor = state.mood > 65 ? "#22c55e" : state.mood > 40 ? "#f59e0b" : "#ef4444";
   const cravingColor = state.craving > 60 ? "#ef4444" : state.craving > 30 ? "#f59e0b" : "#22c55e";
@@ -456,7 +521,7 @@ export default function App() {
         )}
 
         {/* Persona selector */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5, marginBottom: 8 }}>
           {Object.entries(PERSONAS).map(([key, p]) => (
             <button key={key} onClick={() => setSelectedPersona(key)} style={{
               background: selectedPersona === key ? "rgba(129,140,248,0.06)" : "rgba(255,255,255,0.01)",
@@ -468,6 +533,17 @@ export default function App() {
               <div style={{ fontSize: 8, color: "#64748b", marginTop: 1 }}>{p.bio}</div>
             </button>
           ))}
+          <button onClick={handleRandomClick} style={{
+            background: selectedPersona === "random" ? "rgba(236,72,153,0.06)" : "rgba(255,255,255,0.01)",
+            border: selectedPersona === "random" ? "1.5px dashed rgba(236,72,153,0.35)" : "1.5px dashed rgba(255,255,255,0.08)",
+            borderRadius: 6, padding: "6px 8px", cursor: "pointer", textAlign: "left", color: "#e2e8f0",
+          }}>
+            <span style={{ fontSize: 15 }}>🎲</span>
+            <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 5, color: selectedPersona === "random" ? "#ec4899" : "#94a3b8" }}>Random</span>
+            <div style={{ fontSize: 8, color: "#475569", marginTop: 1 }}>
+              {selectedPersona === "random" && randomPersona ? `${randomPersona.name}, ${randomPersona.age} · ${randomPersona.stage}` : "Generate a random persona"}
+            </div>
+          </button>
         </div>
 
         {/* Stats */}
