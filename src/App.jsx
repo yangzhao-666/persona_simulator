@@ -367,6 +367,7 @@ export default function App() {
   const [catFilter, setCatFilter] = useState("all");
   const [timeOfDay, setTimeOfDay] = useState("morning");
   const [autoPolicy, setAutoPolicy] = useState("none"); // "none" | "random"
+  const [pendingDecision, setPendingDecision] = useState(null); // { slotIdx, timeOfDay, event, stateAfterEvent, historyAfterEvent }
   const [dataset, setDataset] = useState([]);
   const [error, setError] = useState(null);
   const endRef = useRef(null);
@@ -553,6 +554,83 @@ export default function App() {
     setIsProcessing(false);
   }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay]);
 
+  // ─── Interactive Day Mode ───
+  const runSlot = useCallback(async (slotIdx, currentState, currentHistory) => {
+    setIsProcessing(true);
+    setError(null);
+    const tod = TIME_OF_DAY[slotIdx];
+    setTimeOfDay(tod.id);
+    try {
+      const prompt = lifeEventPrompt(currentState, tod.id);
+      const sysPrompt = persona.systemPrompt + JSON_INSTRUCTION;
+      const text = await callLLM(provider, llmConfig, sysPrompt, [...currentHistory.slice(-16), { role: "user", content: prompt }]);
+      const ev = parseJSON(text);
+      const ns = clamp({
+        ...currentState,
+        day: slotIdx === 0 ? currentState.day + 1 : currentState.day, // only increment on morning
+        mood: currentState.mood + (ev.moodChange || 0),
+        craving: currentState.craving + (ev.cravingChange || 0),
+        engagement: currentState.engagement + (ev.engagementChange || 0),
+        soberDays: ev.didDrink ? 0 : currentState.soberDays + 1,
+        drinksPerDay: ev.drinksIfDrank || 0,
+        appOpensToday: ev.openedApp ? currentState.appOpensToday + 1 : 0,
+        assignmentsDone: currentState.assignmentsDone + (ev.didAssignment ? 1 : 0),
+        registrationsDone: currentState.registrationsDone + (ev.didRegistration ? 1 : 0),
+        forumPosts: currentState.forumPosts + (ev.postedForum ? 1 : 0),
+        lastAppOpen: ev.openedApp ? 0 : currentState.lastAppOpen + 1,
+      });
+      setState(ns);
+      setTimeline(t => [...t, { type: "life", ...ev, day: ns.day, timeOfDay: tod.id, id: Date.now() }]);
+      const newHistory = [...currentHistory, { role: "user", content: `Day ${ns.day} ${tod.id}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30);
+      setConvHistory(newHistory);
+      setDataset(d => [...d, { type: "life_event", persona: persona.name, stage: persona.stage, day: ns.day, timeOfDay: tod.id, obs: stateToObs(currentState, tod.id), next_obs: stateToObs(ns, tod.id), event: ev.event, didDrink: ev.didDrink, openedApp: ev.openedApp }]);
+      setPendingDecision({ slotIdx, timeOfDay: tod.id, event: ev.event, stateAfterEvent: ns, historyAfterEvent: newHistory });
+    } catch (e) {
+      setError(e.message || "Failed to generate.");
+    }
+    setIsProcessing(false);
+  }, [persona, provider, llmConfig]);
+
+  const handleDecision = useCallback(async (notif) => {
+    if (!pendingDecision) return;
+    const { slotIdx, timeOfDay: tod, stateAfterEvent, historyAfterEvent } = pendingDecision;
+    setPendingDecision(null);
+    const isLastSlot = slotIdx >= TIME_OF_DAY.length - 1;
+
+    if (notif) {
+      setIsProcessing(true);
+      setTimeline(t => [...t, { type: "notif-sent", notif, day: stateAfterEvent.day, timeOfDay: tod, id: Date.now() }]);
+      try {
+        const prompt = reactionPrompt(notif, stateAfterEvent, tod);
+        const sysPrompt = persona.systemPrompt + JSON_INSTRUCTION;
+        const text = await callLLM(provider, llmConfig, sysPrompt, [...historyAfterEvent.slice(-20), { role: "user", content: prompt }]);
+        const reaction = parseJSON(text);
+        const ns2 = clamp({ ...stateAfterEvent, mood: stateAfterEvent.mood + (reaction.moodChange || 0), craving: stateAfterEvent.craving + (reaction.cravingChange || 0), engagement: stateAfterEvent.engagement + (reaction.engagementChange || 0) });
+        setState(ns2);
+        setTimeline(t => [...t, { type: "reaction", ...reaction, notif, day: stateAfterEvent.day, id: Date.now() + 1 }]);
+        const newHistory = [...historyAfterEvent, { role: "user", content: `Notif: "${notif.name}"` }, { role: "assistant", content: JSON.stringify(reaction) }].slice(-30);
+        setConvHistory(newHistory);
+        const reward = computeReward(reaction);
+        setDataset(d => [...d, { type: "notification", persona: persona.name, stage: persona.stage, day: stateAfterEvent.day, timeOfDay: tod, obs: stateToObs(stateAfterEvent, tod), next_obs: stateToObs(ns2, tod), action: { notif_id: notif.id, notif_cat: notif.cat, notif_ch: notif.ch }, reaction: { thought: reaction.thought, emotion: reaction.emotion, action: reaction.action, moodChange: reaction.moodChange, cravingChange: reaction.cravingChange, engagementChange: reaction.engagementChange, wouldReturn: reaction.wouldReturn, designFeedback: reaction.designFeedback }, reward, done: !reaction.wouldReturn }]);
+        setIsProcessing(false);
+        if (!isLastSlot) await runSlot(slotIdx + 1, ns2, newHistory);
+      } catch (e) {
+        setError(e.message || "Failed to generate reaction.");
+        setIsProcessing(false);
+      }
+    } else {
+      // skip — record no_op
+      setDataset(d => [...d, { type: "notification", persona: persona.name, stage: persona.stage, day: stateAfterEvent.day, timeOfDay: tod, obs: stateToObs(stateAfterEvent, tod), next_obs: stateToObs(stateAfterEvent, tod), action: { notif_id: "no_op" }, reaction: null, reward: 0, done: false }]);
+      if (!isLastSlot) await runSlot(slotIdx + 1, stateAfterEvent, historyAfterEvent);
+    }
+  }, [pendingDecision, persona, provider, llmConfig, runSlot]);
+
+  const startDay = useCallback(async () => {
+    if (isProcessing || !state || pendingDecision) return;
+    setSpeed("manual");
+    await runSlot(0, state, convHistory);
+  }, [isProcessing, state, convHistory, pendingDecision, runSlot]);
+
   const filteredNotifs = catFilter === "all" ? NOTIFICATIONS : NOTIFICATIONS.filter(n => n.cat === catFilter);
 
   // ─── Setup Screen ───
@@ -665,7 +743,7 @@ export default function App() {
                 ⬇ Export {dataset.length} samples
               </button>
             )}
-            <button onClick={() => setSpeed(speed === "auto" ? "manual" : "auto")} style={{ background: speed === "auto" ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.03)", border: "1px solid " + (speed === "auto" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.06)"), borderRadius: 5, padding: "4px 9px", color: speed === "auto" ? "#22c55e" : "#64748b", cursor: "pointer", fontSize: 10 }}>
+            <button onClick={() => setSpeed(speed === "auto" ? "manual" : "auto")} disabled={!!pendingDecision} style={{ background: speed === "auto" ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.03)", border: "1px solid " + (speed === "auto" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.06)"), borderRadius: 5, padding: "4px 9px", color: speed === "auto" ? "#22c55e" : "#64748b", cursor: "pointer", fontSize: 10, opacity: pendingDecision ? 0.3 : 1 }}>
               {speed === "auto" ? "⏸ Pause" : "▶ Auto"}
             </button>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 5, overflow: "hidden" }}>
@@ -675,8 +753,8 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <button onClick={advanceDay} disabled={isProcessing} style={{ background: "#6366f1", border: "none", borderRadius: 5, padding: "4px 10px", color: "#fff", fontSize: 10, fontWeight: 600, cursor: isProcessing ? "wait" : "pointer", opacity: isProcessing ? 0.5 : 1 }}>
-              Next Day →
+            <button onClick={startDay} disabled={isProcessing || !!pendingDecision} style={{ background: "#6366f1", border: "none", borderRadius: 5, padding: "4px 10px", color: "#fff", fontSize: 10, fontWeight: 600, cursor: (isProcessing || pendingDecision) ? "wait" : "pointer", opacity: (isProcessing || pendingDecision) ? 0.5 : 1 }}>
+              ▶ Start Day
             </button>
             <button onClick={() => { setSetupDone(false); setSpeed("manual"); }} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 5, padding: "4px 8px", color: "#475569", cursor: "pointer", fontSize: 10 }}>⚙️</button>
           </div>
@@ -868,6 +946,36 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Notification Decision Modal */}
+      {pendingDecision && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+          <div style={{ background: "#0e1117", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 20, maxWidth: 460, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>{TIME_OF_DAY.find(t => t.id === pendingDecision.timeOfDay)?.icon}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#818cf8" }}>Day {pendingDecision.stateAfterEvent.day} · {pendingDecision.timeOfDay}</span>
+              <span style={{ marginLeft: "auto", fontSize: 9, color: "#475569" }}>{pendingDecision.slotIdx + 1} / {TIME_OF_DAY.length}</span>
+            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", lineHeight: 1.6, borderLeft: "2px solid rgba(129,140,248,0.2)", paddingLeft: 8 }}>
+              "{pendingDecision.event}"
+            </div>
+            <div style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, color: "#475569" }}>
+              Send a notification?
+            </div>
+            <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+              {NOTIFICATIONS.filter(n => !getNotifReason(n, pendingDecision.stateAfterEvent)).map(n => (
+                <button key={n.id} onClick={() => handleDecision(n)} style={{ textAlign: "left", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 5, padding: "6px 8px", cursor: "pointer", color: "#d1d5db", fontFamily: "Outfit" }}>
+                  <div style={{ fontSize: 10, fontWeight: 500 }}>{n.name}</div>
+                  <div style={{ fontSize: 7, color: CAT_COLORS[n.cat] || "#64748b" }}>{n.cat} · {n.ch}</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => handleDecision(null)} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, padding: "7px", color: "#475569", cursor: "pointer", fontSize: 10, marginTop: 4 }}>
+              Skip → {pendingDecision.slotIdx < TIME_OF_DAY.length - 1 ? `Continue to ${TIME_OF_DAY[pendingDecision.slotIdx + 1].label}` : "End Day"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes si { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
