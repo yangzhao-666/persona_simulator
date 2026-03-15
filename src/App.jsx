@@ -251,6 +251,43 @@ function getNotifReason(notif, state) {
   }
 }
 
+// ─── RL Data Collection ───
+function stateToObs(state, timeOfDay) {
+  return {
+    mood:             state.mood,
+    craving:          state.craving,
+    engagement:       state.engagement,
+    soberDays:        state.soberDays,
+    phase:            state.phase,
+    drinksPerDay:     state.drinksPerDay,
+    lastAppOpen:      state.lastAppOpen,
+    hasBuddy:         state.hasBuddy ? 1 : 0,
+    forumPosts:       state.forumPosts,
+    assignmentsDone:  state.assignmentsDone,
+    timeOfDay,        // "morning" | "afternoon" | "evening"
+  };
+}
+
+function computeReward(reaction) {
+  const r =
+    (reaction.engagementChange || 0) * 0.4 +
+    (reaction.moodChange       || 0) * 0.3 +
+    -(reaction.cravingChange   || 0) * 0.3 +
+    (reaction.wouldReturn ? 5 : -10);
+  return Math.round(r * 100) / 100;
+}
+
+function exportJSONL(dataset) {
+  const lines = dataset.map(r => JSON.stringify(r)).join("\n");
+  const blob  = new Blob([lines], { type: "application/jsonl" });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement("a");
+  a.href      = url;
+  a.download  = `rl_dataset_${Date.now()}.jsonl`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const CAT_COLORS = {
   milestone: "#22c55e", social: "#8b5cf6", progress: "#3b82f6", assignment: "#6366f1",
   "check-in": "#06b6d4", warning: "#f59e0b", "re-engage": "#ef4444", onboarding: "#10b981",
@@ -329,6 +366,7 @@ export default function App() {
   const [speed, setSpeed] = useState("manual");
   const [catFilter, setCatFilter] = useState("all");
   const [timeOfDay, setTimeOfDay] = useState("morning");
+  const [dataset, setDataset] = useState([]);
   const [error, setError] = useState(null);
   const endRef = useRef(null);
   const autoRef = useRef(null);
@@ -397,6 +435,18 @@ export default function App() {
       setState(ns);
       setTimeline(t => [...t, { type: "life", ...ev, day: ns.day, timeOfDay, id: Date.now() }]);
       setConvHistory(h => [...h, { role: "user", content: `Day ${ns.day} ${timeOfDay}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30));
+      setDataset(d => [...d, {
+        type:       "life_event",
+        persona:    persona.name,
+        stage:      persona.stage,
+        day:        ns.day,
+        timeOfDay,
+        obs:        stateToObs(state, timeOfDay),
+        next_obs:   stateToObs(ns, timeOfDay),
+        event:      ev.event,
+        didDrink:   ev.didDrink,
+        openedApp:  ev.openedApp,
+      }]);
       if (speed === "auto") {
         const idx = TIME_OF_DAY.findIndex(t => t.id === timeOfDay);
         setTimeOfDay(TIME_OF_DAY[(idx + 1) % TIME_OF_DAY.length].id);
@@ -431,6 +481,33 @@ export default function App() {
       setState(ns);
       setTimeline(t => [...t, { type: "reaction", ...reaction, notif, day: state.day, id: Date.now() + 1 }]);
       setConvHistory(h => [...h, { role: "user", content: `Notif: "${notif.name}"` }, { role: "assistant", content: JSON.stringify(reaction) }].slice(-30));
+      const reward = computeReward(reaction);
+      setDataset(d => [...d, {
+        type:        "notification",
+        persona:     persona.name,
+        stage:       persona.stage,
+        day:         state.day,
+        timeOfDay,
+        obs:         stateToObs(state, timeOfDay),
+        next_obs:    stateToObs(ns, timeOfDay),
+        action: {
+          notif_id:  notif.id,
+          notif_cat: notif.cat,
+          notif_ch:  notif.ch,
+        },
+        reaction: {
+          thought:          reaction.thought,
+          emotion:          reaction.emotion,
+          action:           reaction.action,
+          moodChange:       reaction.moodChange,
+          cravingChange:    reaction.cravingChange,
+          engagementChange: reaction.engagementChange,
+          wouldReturn:      reaction.wouldReturn,
+          designFeedback:   reaction.designFeedback,
+        },
+        reward,
+        done: !reaction.wouldReturn,
+      }]);
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to generate reaction.");
@@ -545,6 +622,11 @@ export default function App() {
             </span>
           </div>
           <div style={{ display: "flex", gap: 4 }}>
+            {dataset.length > 0 && (
+              <button onClick={() => exportJSONL(dataset)} style={{ background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 5, padding: "4px 9px", color: "#22c55e", cursor: "pointer", fontSize: 10 }}>
+                ⬇ Export {dataset.length} samples
+              </button>
+            )}
             <button onClick={() => setSpeed(speed === "auto" ? "manual" : "auto")} style={{ background: speed === "auto" ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.03)", border: "1px solid " + (speed === "auto" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.06)"), borderRadius: 5, padding: "4px 9px", color: speed === "auto" ? "#22c55e" : "#64748b", cursor: "pointer", fontSize: 10 }}>
               {speed === "auto" ? "⏸ Pause" : "▶ Auto"}
             </button>
