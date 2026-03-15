@@ -366,6 +366,7 @@ export default function App() {
   const [speed, setSpeed] = useState("manual");
   const [catFilter, setCatFilter] = useState("all");
   const [timeOfDay, setTimeOfDay] = useState("morning");
+  const [autoPolicy, setAutoPolicy] = useState("none"); // "none" | "random"
   const [dataset, setDataset] = useState([]);
   const [error, setError] = useState(null);
   const endRef = useRef(null);
@@ -434,7 +435,8 @@ export default function App() {
       });
       setState(ns);
       setTimeline(t => [...t, { type: "life", ...ev, day: ns.day, timeOfDay, id: Date.now() }]);
-      setConvHistory(h => [...h, { role: "user", content: `Day ${ns.day} ${timeOfDay}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30));
+      const updatedHistory = [...convHistory, { role: "user", content: `Day ${ns.day} ${timeOfDay}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30);
+      setConvHistory(updatedHistory);
       setDataset(d => [...d, {
         type:       "life_event",
         persona:    persona.name,
@@ -447,7 +449,43 @@ export default function App() {
         didDrink:   ev.didDrink,
         openedApp:  ev.openedApp,
       }]);
+
       if (speed === "auto") {
+        if (autoPolicy === "random") {
+          // pick a random applicable notification and react to it inline
+          const applicable = NOTIFICATIONS.filter(n => !getNotifReason(n, ns));
+          if (applicable.length > 0) {
+            const notif = applicable[Math.floor(Math.random() * applicable.length)];
+            setTimeline(t => [...t, { type: "notif-sent", notif, day: ns.day, timeOfDay, id: Date.now() }]);
+            const rPrompt = reactionPrompt(notif, ns, timeOfDay);
+            const sysPrompt2 = persona.systemPrompt + JSON_INSTRUCTION;
+            const rText = await callLLM(provider, llmConfig, sysPrompt2, [...updatedHistory.slice(-20), { role: "user", content: rPrompt }]);
+            const reaction = parseJSON(rText);
+            const ns2 = clamp({ ...ns, mood: ns.mood + (reaction.moodChange || 0), craving: ns.craving + (reaction.cravingChange || 0), engagement: ns.engagement + (reaction.engagementChange || 0) });
+            setState(ns2);
+            setTimeline(t => [...t, { type: "reaction", ...reaction, notif, day: ns.day, id: Date.now() + 1 }]);
+            setConvHistory(h => [...updatedHistory, { role: "user", content: `Notif: "${notif.name}"` }, { role: "assistant", content: JSON.stringify(reaction) }].slice(-30));
+            const reward = computeReward(reaction);
+            setDataset(d => [...d, {
+              type: "notification", persona: persona.name, stage: persona.stage,
+              day: ns.day, timeOfDay,
+              obs: stateToObs(ns, timeOfDay), next_obs: stateToObs(ns2, timeOfDay),
+              action: { notif_id: notif.id, notif_cat: notif.cat, notif_ch: notif.ch },
+              reaction: { thought: reaction.thought, emotion: reaction.emotion, action: reaction.action, moodChange: reaction.moodChange, cravingChange: reaction.cravingChange, engagementChange: reaction.engagementChange, wouldReturn: reaction.wouldReturn, designFeedback: reaction.designFeedback },
+              reward, done: !reaction.wouldReturn,
+            }]);
+          }
+        } else {
+          // no_op — record day transition with null action
+          setDataset(d => [...d, {
+            type: "notification", persona: persona.name, stage: persona.stage,
+            day: ns.day, timeOfDay,
+            obs: stateToObs(state, timeOfDay), next_obs: stateToObs(ns, timeOfDay),
+            action: { notif_id: "no_op" },
+            reaction: null, reward: 0, done: false,
+          }]);
+        }
+        // cycle time of day
         const idx = TIME_OF_DAY.findIndex(t => t.id === timeOfDay);
         setTimeOfDay(TIME_OF_DAY[(idx + 1) % TIME_OF_DAY.length].id);
       }
@@ -457,7 +495,7 @@ export default function App() {
       setSpeed("manual");
     }
     setIsProcessing(false);
-  }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay, speed]);
+  }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay, speed, autoPolicy]);
 
   const sendNotification = useCallback(async (notif) => {
     if (isProcessing || !state) return;
@@ -630,6 +668,13 @@ export default function App() {
             <button onClick={() => setSpeed(speed === "auto" ? "manual" : "auto")} style={{ background: speed === "auto" ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.03)", border: "1px solid " + (speed === "auto" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.06)"), borderRadius: 5, padding: "4px 9px", color: speed === "auto" ? "#22c55e" : "#64748b", cursor: "pointer", fontSize: 10 }}>
               {speed === "auto" ? "⏸ Pause" : "▶ Auto"}
             </button>
+            <div style={{ display: "flex", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 5, overflow: "hidden" }}>
+              {[{ id: "none", label: "No notifs" }, { id: "random", label: "🎲 Random" }].map(p => (
+                <button key={p.id} onClick={() => setAutoPolicy(p.id)} style={{ background: autoPolicy === p.id ? "rgba(129,140,248,0.12)" : "transparent", border: "none", borderRight: p.id === "none" ? "1px solid rgba(255,255,255,0.05)" : "none", padding: "4px 8px", color: autoPolicy === p.id ? "#818cf8" : "#475569", cursor: "pointer", fontSize: 9 }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
             <button onClick={advanceDay} disabled={isProcessing} style={{ background: "#6366f1", border: "none", borderRadius: 5, padding: "4px 10px", color: "#fff", fontSize: 10, fontWeight: 600, cursor: isProcessing ? "wait" : "pointer", opacity: isProcessing ? 0.5 : 1 }}>
               Next Day →
             </button>
