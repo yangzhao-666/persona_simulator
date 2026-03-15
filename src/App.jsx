@@ -221,6 +221,36 @@ const NOTIFICATIONS = [
   { id: "buddy_phase_incomplete", name: "Buddy: Phase Incomplete", cat: "progress", ch: "silent" },
 ];
 
+// ─── Notification Applicability ───
+function getNotifReason(notif, state) {
+  const { phase, hasBuddy, forumPosts, lastAppOpen, day } = state;
+  switch (notif.id) {
+    case "welcome":              return day > 7            ? "Past onboarding window"     : null;
+    case "survey":               return phase > 2          ? "Past early phase"           : null;
+    case "phase_1_done":         return phase < 2          ? "Phase 1 not finished"       : null;
+    case "phase_2_done":         return phase < 3          ? "Phase 2 not reached"        : null;
+    case "phase_3_done":         return phase < 4          ? "Phase 3 not reached"        : null;
+    case "phase_4_done":         return phase < 5          ? "Phase 4 not reached"        : null;
+    case "phase_5_done":         return phase < 5          ? "Phase 5 not reached"        : null;
+    case "results_good":
+    case "results_low":          return phase < 2          ? "No phase results yet"       : null;
+    case "inactive_2w":
+    case "inactive_4w":
+    case "buddy_phase_done":
+    case "buddy_phase_incomplete": return !hasBuddy        ? "No buddy"                   : null;
+    case "forum_reply":
+    case "followed_reply":       return forumPosts === 0   ? "Never posted on forum"      : null;
+    case "remind_2d":            return lastAppOpen < 2    ? "Active recently"            : null;
+    case "remind_7d":            return lastAppOpen < 7    ? "Active recently"            : null;
+    case "remind_14d":           return lastAppOpen < 14   ? "Active recently"            : null;
+    case "remind_28d":           return lastAppOpen < 28   ? "Active recently"            : null;
+    case "deact_1m":             return lastAppOpen < 2    ? "Active recently"            : null;
+    case "deact_1w":             return lastAppOpen < 23   ? "Not inactive long enough"   : null;
+    case "deact_1d":             return lastAppOpen < 29   ? "Not inactive long enough"   : null;
+    default:                     return null;
+  }
+}
+
 const CAT_COLORS = {
   milestone: "#22c55e", social: "#8b5cf6", progress: "#3b82f6", assignment: "#6366f1",
   "check-in": "#06b6d4", warning: "#f59e0b", "re-engage": "#ef4444", onboarding: "#10b981",
@@ -577,17 +607,23 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {filteredNotifs.map(n => (
-              <button key={n.id} onClick={() => sendNotification(n)} disabled={isProcessing} style={{
-                width: "100%", textAlign: "left", background: "rgba(255,255,255,0.005)",
-                border: "1px solid rgba(255,255,255,0.02)", borderRadius: 4,
-                padding: "5px 6px", marginBottom: 2, cursor: isProcessing ? "wait" : "pointer",
-                color: "#d1d5db", fontFamily: "Outfit", opacity: isProcessing ? 0.4 : 1,
-              }}>
-                <div style={{ fontSize: 10, fontWeight: 500 }}>{n.name}</div>
-                <div style={{ fontSize: 7, color: CAT_COLORS[n.cat] || "#64748b" }}>{n.cat} · {n.ch}</div>
-              </button>
-            ))}
+            {filteredNotifs.map(n => {
+              const reason = state ? getNotifReason(n, state) : null;
+              return (
+                <button key={n.id} onClick={() => sendNotification(n)} disabled={isProcessing} style={{
+                  width: "100%", textAlign: "left", background: reason ? "transparent" : "rgba(255,255,255,0.005)",
+                  border: `1px solid ${reason ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.02)"}`, borderRadius: 4,
+                  padding: "5px 6px", marginBottom: 2, cursor: isProcessing ? "wait" : "pointer",
+                  color: reason ? "#334155" : "#d1d5db", fontFamily: "Outfit", opacity: isProcessing ? 0.4 : 1,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 4 }}>
+                    <div style={{ fontSize: 10, fontWeight: 500 }}>{n.name}</div>
+                    {reason && <span style={{ fontSize: 6, color: "#334155", flexShrink: 0 }}>{reason}</span>}
+                  </div>
+                  <div style={{ fontSize: 7, color: reason ? "#2d3748" : (CAT_COLORS[n.cat] || "#64748b") }}>{n.cat} · {n.ch}</div>
+                </button>
+              );
+            })}
           </div>
 
           {/* Timeline */}
