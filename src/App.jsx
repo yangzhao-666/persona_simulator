@@ -397,13 +397,17 @@ export default function App() {
       setState(ns);
       setTimeline(t => [...t, { type: "life", ...ev, day: ns.day, timeOfDay, id: Date.now() }]);
       setConvHistory(h => [...h, { role: "user", content: `Day ${ns.day} ${timeOfDay}` }, { role: "assistant", content: JSON.stringify(ev) }].slice(-30));
+      if (speed === "auto") {
+        const idx = TIME_OF_DAY.findIndex(t => t.id === timeOfDay);
+        setTimeOfDay(TIME_OF_DAY[(idx + 1) % TIME_OF_DAY.length].id);
+      }
     } catch (e) {
       console.error(e);
       setError(e.message || "Failed to generate. Check your LLM connection.");
       setSpeed("manual");
     }
     setIsProcessing(false);
-  }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay]);
+  }, [isProcessing, state, persona, convHistory, provider, llmConfig, timeOfDay, speed]);
 
   const sendNotification = useCallback(async (notif) => {
     if (isProcessing || !state) return;
